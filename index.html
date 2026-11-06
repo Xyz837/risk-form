@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<title>工地事前 風險評估暨危害告知</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --red:#d93025; --green:#007350; --ink:#202124; --sub:#5f6368; --line:#dadce0; --bg:#f0ebe4; }
+  * { box-sizing:border-box; }
+  [hidden] { display:none !important; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font-family:-apple-system,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif; font-size:16px; line-height:1.5; }
+  .wrap { max-width:680px; margin:0 auto; padding:12px 12px 40px; }
+  .card { background:#fff; border-radius:8px; padding:18px 18px 16px; margin-bottom:12px; border:1px solid var(--line); }
+  .head { border-top:10px solid var(--green); }
+  .head h1 { font-size:24px; margin:0 0 6px; line-height:1.3; }
+  .head p { margin:0; color:var(--sub); }
+  .head .req-note { color:var(--red); font-size:14px; margin-top:10px; }
+  .q.bad { border-color:var(--red); }
+  .qt { font-weight:600; margin-bottom:10px; white-space:pre-wrap; }
+  .qt .star { color:var(--red); margin-left:4px; }
+  .note .qt { font-weight:700; margin:0; }
+  .opt { display:flex; align-items:flex-start; gap:10px; padding:7px 0; cursor:pointer; }
+  .opt input { width:20px; height:20px; margin:2px 0 0; flex:none; accent-color:var(--green); }
+  input[type=text], input[type=date], textarea { width:100%; font-size:16px; padding:9px 10px; border:1px solid var(--line);
+         border-radius:6px; font-family:inherit; background:#fff; color:var(--ink); }
+  textarea { min-height:80px; resize:vertical; }
+  .msg { color:var(--red); font-size:14px; margin-top:8px; }
+  .padbox { position:relative; border:1.5px dashed #999; border-radius:6px; background:#fff; }
+  canvas { display:block; width:100%; height:200px; touch-action:none; }
+  .hint { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#bbb; pointer-events:none; font-size:18px; }
+  .row { display:flex; justify-content:flex-end; margin-top:6px; }
+  button { font-size:16px; border:0; border-radius:6px; padding:12px 16px; cursor:pointer; font-family:inherit; }
+  .clear { background:#eee; color:#333; padding:7px 14px; font-size:14px; }
+  .send { width:100%; background:var(--green); color:#fff; font-weight:700; font-size:17px; }
+  .send:disabled { background:#999; }
+  .err { color:var(--red); margin-top:10px; min-height:1.2em; font-size:15px; }
+  .done { text-align:center; padding:30px 16px; }
+  .done .big { font-size:24px; font-weight:700; color:var(--green); margin-bottom:8px; }
+  .done img { max-width:100%; border:1px solid var(--line); border-radius:6px; margin-top:14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="formArea">
+    <div class="card head">
+      <h1 id="ftitle"></h1>
+      <p id="fdesc"></p>
+      <div class="req-note">* 表示必填問題</div>
+    </div>
+    <div id="qs"></div>
+    <div class="card q" id="sigCard">
+      <div class="qt">廠商簽名<span class="star">*</span></div>
+      <div class="padbox">
+        <canvas id="pad"></canvas>
+        <div class="hint" id="hint">請在此用手指簽名</div>
+      </div>
+      <div class="row"><button class="clear" id="clear" type="button">重簽</button></div>
+      <div class="msg" hidden>請先簽名</div>
+    </div>
+    <button class="send" id="send" type="button">送出</button>
+    <div class="err" id="err"></div>
+  </div>
+
+  <div class="card done" id="doneCard" hidden>
+    <div class="big">已送出，謝謝！</div>
+    <div id="doneTime"></div>
+    <img id="doneSig" alt="簽名">
+  </div>
+</div>
+
+<script>
+var FORM = {"title": "工地事前 風險評估暨危害告知", "desc": "風險評估&危害告知及注意事項", "questions": [{"type": "radio", "title": "區域", "required": true, "options": ["北一區", "北二區", "北三區", "桃竹一區", "桃竹二區", "中一區", "中二區", "南一區", "南二區"]}, {"type": "text", "title": "工地名稱 (範例 : 總部門市)", "required": true}, {"type": "text", "title": "工期區間 (範例 : 2026/10/20~2026/11/15)", "required": true}, {"type": "text", "title": "評估人員 (工程專員)", "required": true}, {"type": "date", "title": "評估日期 (範例 : 2026/10/20)", "required": true}, {"type": "radio", "title": "告知對象", "required": true, "options": ["事業單位 (統一超商)→告知承攬人 (承攬商)", "承攬人 (承攬商 )→再承攬人 (承攬商下包)"]}, {"type": "check", "title": "進入工區", "required": true, "options": ["針對危頭部碰撞等危害因素，全程應配戴安全帽應繫好帽扣", "避免被刺、割、擦傷，應穿包覆腳部之鞋子(禁穿拖鞋、涼鞋、無後跟鞋子)", "為防止火災發生、嚴禁於工地抽菸", "確保施工人員作業穩定性，嚴禁攜帶及飲用酒類或含酒精性飲料(維士比...等酒精性飲料)"]}, {"type": "check", "title": "合格人員證照(作業應具備合格證照，並按時回訓)", "required": true, "options": ["裝潢廠商、統包廠商應設置合格現場負責人(丙種安全衛生業務主管...)", "動火(乙炔熔接裝置作業人員 )，吊掛(操作手、吊掛手、車輛檢查合格證)，屋頂作業主管 ，堆高機操作人員，高空工業車操作人員，施工架(施工架組配作業主管&強度計算書及施工圖說、露天開挖作業主管、模板支撐座業主管、強度計算書及施工圖說、擋土支撐作業主管及施工圖說)"]}, {"type": "check", "title": "登高作業/合梯/墜落、滾落", "required": true, "options": ["應使用合格鋁梯(禁止使用木梯、圓管梯)", "兩梯腳間應使用固定繫材扣牢(禁止使用鐵鍊、繩子等非固定繫材)", "禁止外加料件加長梯腳", "梯腳應有防滑絕緣腳座套", "禁止站立於梯頂作業", "夥同作業 一人扶梯 確保合梯穩固"]}, {"type": "check", "title": "登高作業/移動梯&拉梯/墜落、滾落", "required": true, "options": ["梯頂應突出板面60~100公分", "移動梯上方應與結構物固定", "梯腳應有防滑腳座", "第一人使用移動梯登高時，下方應有人扶梯"]}, {"type": "check", "title": "登高作業/移動式&施工架/墜落、滾落", "required": true, "options": ["應設置外調撐座", "煞車器應完全固定", "應設置安全護欄 (上欄杆、中欄杆)", "應設置安全上下設備", "上方踏板應鋪滿", "人員在移動式施工架上面時，禁止移動該施工架"]}, {"type": "check", "title": "登高作業/施工架框式&鷹架/墜落、滾落", "required": true, "options": ["應使用CNS4750標準構件", "5公尺以上施工架之組配及拆除，應設置施工架組配作業主管", "7公尺以上且立面面積達330平方公尺之施工架，應有專任工程人員或委由相關執業技師(建築師/土木技師/結構技師)設計並簽認之強度計算書及施工圖說。", "內、外側應設置交叉拉桿及下拉桿( 如因工程施作需要，而將內側交叉拉桿拆除時，其內側應設置水平構件，並與立架連結穩固)", "施工架兩端立架及轉角處、上下設備樓梯，應設置護欄", "工作台應應鋪滿密接之踏板(踏板應有金屬鎖扣及防脫落鈎)", "施工架與構造物間，應使用托架鋪設踏板或防墜網(間隙在20公分以下)", "施工架外緣，應設置防塵網", "框式施工架以壁連座與構造物連接，間距垂直9公尺、水平8公尺以下(禁止使用木頭 、鐵絲.....)", "施工架應設置斜撐", "應使用結構插銷(禁止使用鐵絲...)", "施工架底部應使用可調式基腳座鈑(禁止懸空、變形、以木頭搭接)", "施工架上禁止使用梯子、踏凳", "搭設一層施工架 工作平台 作業，應設置護欄及安全上下設備"]}, {"type": "check", "title": "登高作業/高空工作車/墜落、滾落", "required": true, "options": ["操作人員需接受高空作業車_特殊作業安全衛生教育訓練(16 小時，取得證照)", "確認地面平穩及上方作業空間充裕", "應確實使用制動機，以保持穩定狀態", "人員確實配戴安全帽及安全帶鈎掛於穩固位置", "作業停止時應將工作臺下降至最低位置"]}, {"type": "check", "title": "高架作業2公尺以上作業/墜落、滾落", "required": true, "options": ["應使用安全帶並確實鈎掛", "應設錨錠安全母索、防墜器等預防墜落措施"]}, {"type": "check", "title": "開口處(高度2公尺以上)/地面開口、牆壁開口、樓梯側邊開口、四周邊緣開口/ 墜落、滾落", "required": true, "options": ["應設置防護措施。(圍欄、護欄、覆蓋、安全母索、錨錠) 護欄高度應90公分以上(上欄杆/中欄杆/地面間之上下開口距離應≦55 公分)", "應使用安全帶並確實鈎掛", "應設置警告標示"]}, {"type": "check", "title": "屋頂作業/墜落、滾落", "required": true, "options": ["應指派屋頂作業主管於現場指揮監督作業", "應規畫安全通道，設置適當強度且寬度在30公分以上之踏板", "應採取防墜落措施(設置護欄/安全網/錨錠/使用背負式安全帶)"]}, {"type": "check", "title": "吊掛作業/物體飛落、物體倒塌、崩塌、墜落/滾落、感電、被撞", "required": true, "options": ["應有合格證照(一機三證)", "搭乘設備(吊籃)→必須經專業機構簽認(效期二年)", "吊鉤應設置防滑舌片", "應設置過捲揚防止裝置", "吊籃應設置高度90公分以上之扶手、中欄杆、腳趾板", "外伸撐座應完全伸出(地面鋪設鐵板 墊料，補強外伸撐座)", "搭乘人員應全程使用安全帶並確實勾掛", "於架空電線附近從事移動式起重機吊掛作業，移動式起重機應掛接地線，且向台電公司申請安裝防護線管", "吊掛物與線路間應保持安全距離，並設置監視人員監視", "吊掛範圍應設置管制區域(三角錐、連桿、警示帶、圍籬…)，設置交管人員，嚴禁吊掛區域下方有人員或行走", "車輛停放應設置輪檔"]}, {"type": "check", "title": "動火作業(包含以噴燈燒管作業)/與高低溫接觸火災", "required": true, "options": ["應設置防火毯(布) 、滅火器( 每個動火位置均須設置)", "應使用個人防護具( 防護手套、防護面罩...)", "應確認作業區域無易燃物品(紙類、油類...)"]}, {"type": "check", "title": "高壓鋼瓶(乙炔、氧氣、瓦斯、氮氣、二氧化碳)/化學品洩漏、爆炸、被撞", "required": true, "options": ["應直立且固定放置", "應設置防止逆流或回火之安全裝置", "壓力表應正常無損壞", "未使用之高壓鋼瓶應套上帽蓋"]}, {"type": "check", "title": "銅管作業/與高低溫接觸、與有害物接觸", "required": true, "options": ["應使用冷媒回收機"]}, {"type": "check", "title": "活電作業/感電", "required": true, "options": ["應以斷電作業為優先", "應使用絕緣防護具(絕緣手套、絕緣安全鞋、絕緣毯)"]}, {"type": "check", "title": "用電作業/感電", "required": true, "options": ["臨時電箱 : 應設置漏電斷路器", "臨時電箱 : 應設置中隔板(應將帶電體隔離)", "臨時電箱 : 應接地(金屬外殼非帶電部分)", "臨時電源 : 帶電體應有安全隔離措施(帶電體不外露)", "臨時電源 :電源迴路應經過漏電斷路器", "臨時懸垂電燈 : 應設置護罩", "其他 ：應使用動力延長線，禁止使用白扁線 不含弱電類(監視器、電燈)", "其他 ：禁止裸線插接", "其他 ：變壓器端子(帶電體)應設置護套"]}, {"type": "check", "title": "用電作業(電焊機)/感電", "required": true, "options": ["應設置自動電擊防止裝置(應確實開啟)", "應使用個人防護具(絕緣手套、防護面罩)", "絕緣部分應完整無破損(電焊柄、電源線)"]}, {"type": "check", "title": "切割作業/被刺、割、擦傷、粉塵暴露", "required": true, "options": ["切割機具設備 (圓盤鋸、砂輪機、木工鋸台..)應設置護罩(嚴禁使用外力將可動式護罩固定)", "傳動帶、傳動輪、齒輪、轉軸等，應設置護罩或護欄", "木工鋸台應設置集塵裝置"]}, {"type": "check", "title": "釘槍作業/被刺、割、擦傷", "required": true, "options": ["配戴防護眼鏡避免被碎屑、水泥渣、反彈的釘帽或木屑飛濺而擊傷", "嚴禁槍口對人任何時候、任何情況下，都絕對不可以將槍口面對自己或任何人", "裝釘時禁觸扳機，防止誤觸擊發。", "斷開動力源 : 暫停使用、更換零件、清理釘槍堵塞前，必須將氣壓管與工具分開。"]}, {"type": "check", "title": "有機溶劑作業(油漆、香蕉水、松香水…)/有機溶劑接觸", "required": true, "options": ["有機溶劑之容器應張貼 : 危害標示 (GHS)、安全資料表(SDS)", "有機溶劑的容器，不論是否在使用中或不使用，都應隨手蓋緊，以防揮發逸出。", "設置局部排氣裝置", "使用呼吸防護具、防護手套。"]}, {"type": "check", "title": "配管作業(瓦斯/天然氣)/火災、爆炸", "required": true, "options": ["新舊管銜接/舊管切管前 : (1)確認瓦斯來源已關閉", "新舊管銜接/舊管切管前 : (2)確認舊管內無殘存瓦斯", "新舊管銜接完成：(1)測試有無漏氣", "新舊管銜接完成：(2)開啟瓦斯開關", "舊管運出：舊管兩端確實封住"]}, {"type": "check", "title": "物料存放/物體倒塌、崩塌", "required": true, "options": ["應水平放置(無法水平放置時，可採取長邊置於地面斜靠壁面方式)"]}, {"type": "check", "title": "工區環境/墜落、滾落、被刺、割、擦傷、跌倒、滑倒", "required": true, "options": ["高差超過", "1.5公尺以上場所：應有安全上下設備(設置平整通道及有扶手上下設備)", "鋼筋露出處：應採取彎曲、加蓋或加裝護套", "工區範圍：應依規定安裝施工圍籬(工期起 ~工期迄) 如因施工影響需將圍籬暫時拆除，應另以臨時方式做安全區隔(三角錐、警示帶區隔 )"]}, {"type": "check", "title": "高氣溫戶外作業/熱危害", "required": true, "options": ["應有遮陽措施(設置遮陽帳篷、遮陽網或傘)", "應有降溫措施(設置強力風扇或水霧扇)", "應有飲水措施(提供充足的飲用水、運動飲料或鹽錠)", "應有休息措施 (調整作息與休息頻率)"]}, {"type": "check", "title": "拆除作業/物體倒塌、崩塌、物體飛落、感電、墜落、滾落", "required": true, "options": ["拆除順序應由上而下進行拆除", "禁止拆除人員同時在不同高度之位置進行拆除作業", "禁止非作業人員進入拆除範圍內", "構造物之拆除應先確實切斷電源", "在二公尺以上 之高處作業，應確實使用防墜落措施 (安全帶...)"]}, {"type": "note", "title": "如同時符合下列二項，則應設置防火管理人 ，製定施工中消防防護計畫報請當地消防機關備查"}, {"type": "check", "title": "消防法令/火災", "required": true, "options": ["(1). 總樓地板面積在500平方公尺以上 (151.25) 坪之場所", "(2).遇有增建 、 改建 、 修建 、 變更使用或室內裝修施工致影響原有系統式消防安全設備功能時"]}, {"type": "text", "title": "工種+公司全名(裝潢+XX室內裝修公司)", "required": true}, {"type": "date", "title": "廠商簽核日期", "required": true}, {"type": "para", "title": "其他(補充)", "required": true}]};
+var EXEC_URL = "https://script.google.com/macros/s/AKfycbxWBUshvFYCXH-mGMrxW6b-ENrHn7g1QOj4_Ua0Z-Vo8aEmc5RhAA138qq9BJoj83YscQ/exec";
+(function () {
+  document.title = FORM.title;
+  document.getElementById('ftitle').textContent = FORM.title;
+  document.getElementById('fdesc').textContent = FORM.desc;
+
+  var box = document.getElementById('qs'), cards = [];
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+
+  FORM.questions.forEach(function (q, i) {
+    var c = el('div', 'card ' + (q.type === 'note' ? 'note' : 'q'));
+    var t = el('div', 'qt', q.title);
+    if (q.required) t.appendChild(el('span', 'star', '*'));
+    c.appendChild(t);
+    if (q.desc) c.appendChild(el('div', 'qd', q.desc));
+    if (q.type === 'radio' || q.type === 'check') {
+      q.options.forEach(function (o) {
+        var lb = el('label', 'opt'), ip = document.createElement('input');
+        ip.type = q.type === 'radio' ? 'radio' : 'checkbox'; ip.name = 'q' + i; ip.value = o;
+        lb.appendChild(ip); lb.appendChild(el('span', null, o)); c.appendChild(lb);
+      });
+    } else if (q.type === 'text' || q.type === 'date') {
+      var ip = document.createElement('input'); ip.type = q.type; ip.name = 'q' + i; c.appendChild(ip);
+    } else if (q.type === 'para') {
+      var ta = document.createElement('textarea'); ta.name = 'q' + i; c.appendChild(ta);
+    }
+    if (q.type !== 'note') { var m = el('div', 'msg', '這是必填問題'); m.hidden = true; c.appendChild(m); }
+    box.appendChild(c); cards.push(c);
+  });
+
+  function answer(i) {
+    var q = FORM.questions[i], c = cards[i];
+    if (q.type === 'note') return null;
+    if (q.type === 'check') return [].slice.call(c.querySelectorAll('input:checked')).map(function (x) { return x.value; });
+    if (q.type === 'radio') { var r = c.querySelector('input:checked'); return r ? r.value : ''; }
+    return c.querySelector('input,textarea').value.trim();
+  }
+  function mark(c, bad) { c.classList.toggle('bad', bad); c.querySelector('.msg').hidden = !bad; }
+  // 改了就把紅框拿掉
+  box.addEventListener('input', function (e) { var c = e.target.closest('.card'); if (c && c.classList.contains('bad')) mark(c, false); });
+  box.addEventListener('change', function (e) { var c = e.target.closest('.card'); if (c && c.classList.contains('bad')) mark(c, false); });
+
+  // ---- 簽名板
+  var pad = document.getElementById('pad'), hint = document.getElementById('hint'), sigCard = document.getElementById('sigCard');
+  var ctx = pad.getContext('2d'), drawing = false, dirty = false, last = null;
+  function resize() {
+    // 依實際顯示大小×螢幕倍率設畫布，線才不會糊；重設會清空，所以只在還沒簽時調整
+    if (dirty) return;
+    var r = pad.getBoundingClientRect(), k = window.devicePixelRatio || 1;
+    pad.width = Math.round(r.width * k); pad.height = Math.round(r.height * k);
+    ctx.setTransform(k, 0, 0, k, 0, 0);
+    ctx.lineWidth = 2.6; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#111'; ctx.fillStyle = '#111';
+  }
+  function pos(e) { var r = pad.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
+  pad.addEventListener('pointerdown', function (e) {
+    e.preventDefault(); pad.setPointerCapture(e.pointerId);
+    drawing = true; last = pos(e);
+    ctx.beginPath(); ctx.arc(last.x, last.y, ctx.lineWidth / 2, 0, Math.PI * 2); ctx.fill();
+    dirty = true; hint.hidden = true; if (sigCard.classList.contains('bad')) mark(sigCard, false);
+  });
+  pad.addEventListener('pointermove', function (e) {
+    if (!drawing) return; e.preventDefault();
+    var p = pos(e); ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(p.x, p.y); ctx.stroke(); last = p;
+  });
+  ['pointerup', 'pointercancel'].forEach(function (t) { pad.addEventListener(t, function () { drawing = false; }); });
+  document.getElementById('clear').onclick = function () {
+    dirty = false; resize(); ctx.clearRect(0, 0, pad.width, pad.height); hint.hidden = false;
+  };
+  window.addEventListener('resize', resize);
+  resize();
+  function sigPng() {
+    // 疊白底再輸出，免得透明底在別的軟體看起來一片黑
+    var c = document.createElement('canvas'); c.width = pad.width; c.height = pad.height;
+    var x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.drawImage(pad, 0, 0);
+    return c.toDataURL('image/png');
+  }
+
+  // ---- 送出
+  var send = document.getElementById('send'), err = document.getElementById('err');
+  send.onclick = function () {
+    err.textContent = '';
+    var answers = [], first = null, missing = 0;
+    FORM.questions.forEach(function (q, i) {
+      var v = answer(i); answers.push(v);
+      if (q.type === 'note') return;
+      var bad = q.required && (Array.isArray(v) ? v.length === 0 : !v);
+      mark(cards[i], bad); if (bad) { missing++; if (!first) first = cards[i]; }
+    });
+    mark(sigCard, !dirty); if (!dirty) { missing++; if (!first) first = sigCard; }
+    if (first) {
+      err.textContent = '還有 ' + missing + ' 題沒填（紅框處）';
+      first.scrollIntoView({ behavior: 'smooth', block: 'center' }); return;
+    }
+    var sig = sigPng(), data = { answers: answers, sig: sig };
+    send.disabled = true; send.textContent = '送出中…';
+    function ok(r) {
+      document.getElementById('formArea').hidden = true;
+      document.getElementById('doneCard').hidden = false;
+      document.getElementById('doneTime').textContent = '送出時間：' + r.time;
+      document.getElementById('doneSig').src = sig;
+      window.scrollTo(0, 0);
+    }
+    function fail(e) {
+      send.disabled = false; send.textContent = '送出';
+      err.textContent = '送出失敗：' + (e && e.message ? e.message : e);
+    }
+    if (window.google && google.script) {
+      // 從 script.google.com 直接開
+      google.script.run.withSuccessHandler(ok).withFailureHandler(fail).submitForm(data);
+    } else {
+      // GitHub Pages：text/plain 不觸發 CORS 預檢；不帶 cookie，Google 帳號不會插手
+      fetch(EXEC_URL, { method: 'POST', body: JSON.stringify(data), credentials: 'omit', redirect: 'follow',
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' } })
+        .then(function (res) { return res.json(); })
+        .then(function (r) { if (r.ok) ok(r); else fail(r.error); })
+        .catch(function () { fail('網路不穩，請再按一次送出'); });
+    }
+  };
+})();
+</script>
+</body>
+</html>
