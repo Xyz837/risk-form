@@ -57,7 +57,7 @@
   .chips { display:flex; flex-wrap:wrap; gap:10px; }
   .chip { display:flex; align-items:center; gap:8px; border:2px solid var(--line); border-radius:28px; padding:9px 16px 9px 12px; cursor:pointer; }
   .chip input { width:24px; height:24px; margin:0; accent-color:var(--green); }
-  .chip:has(input:checked) { border-color:var(--green); background:#e8f3ee; font-weight:600; }
+  .chip.on { border-color:var(--green); background:#e8f3ee; font-weight:600; }
   .locked .tag { display:inline-block; background:#e8f3ee; color:var(--green); font-size:15px; border-radius:4px; padding:1px 8px; margin-left:8px; font-weight:600; }
   .locked input { background:#f4f4f4; color:#333; -webkit-text-fill-color:#333; opacity:1; }
   .staff .link { word-break:break-all; background:#f4f4f4; border-radius:6px; padding:10px; margin:12px 0; font-size:15px; }
@@ -99,7 +99,7 @@
     <div id="doneTime"></div>
     <div class="shot">請截圖這個畫面，傳給工程專員</div>
     <img id="doneSig" alt="簽名">
-    <button class="again" type="button" onclick="location.reload()">再填下一家</button>
+    <button class="again" type="button" onclick="location.href = location.pathname">再填下一家</button>
   </div>
 </div>
 
@@ -119,7 +119,10 @@ var DEMO = true;
   function save(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
   var DRAFT = 'riskform_v2_draft' + (DEMO ? '_demo' : ''), ME = 'riskform_v2_me', STAFF = 'riskform_v2_staff';
   document.getElementById('demoBar').hidden = !DEMO;
+  // 草稿只沿用同一條連結的：從 A 店專員連結填一半、再開 B 店連結，B 店重新開始（sid 也換新，免得被當成 A 店重送）
+  var LINK = ['s', 'n', 'a', 'b'].map(function (k) { return new URLSearchParams(location.search).get(k) || ''; }).join('|');
   var draft = load(DRAFT) || {}, me = load(ME) || {};
+  if ((draft.link || '|||') !== LINK) draft = { link: LINK };
   if (!draft.sid) draft.sid = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   draft.vals = draft.vals || {};
 
@@ -230,7 +233,9 @@ var DEMO = true;
     FORM.questions.forEach(function (q, i) {
       var js = jobOf[q.title]; if (!js) return;
       cards[i].hidden = !js.some(function (n) { return on.indexOf(n) >= 0; });
+      if (cards[i].hidden) mark(cards[i], false);   // 藏起來的題不能留紅框
     });
+    [].forEach.call(document.querySelectorAll('input[name=jobs]'), function (x) { x.parentNode.classList.toggle('on', x.checked); });
     if (jobCard && on.length) mark(jobCard, false);
   }
   function answer(i) {
@@ -290,9 +295,12 @@ var DEMO = true;
     cards[sq].querySelector('input').value = st ? st[0] + ' ' + st[1] : (qs.get('n') || qs.get('s'));
     lock(sq);
     if (st && areaQ >= 0) { var ar = cards[areaQ].querySelector('input[value="' + st[2] + '"]'); if (ar) { ar.checked = true; lock(areaQ); } }
-    if (qs.get('a') && qs.get('b')) { var rr = cards[rq].querySelectorAll('input'); rr[0].value = qs.get('a'); rr[1].value = qs.get('b'); lock(rq); }
+    if (qs.get('a') && qs.get('b')) {   // 日期不合法或起訖顛倒就不鎖，讓廠商自己改
+      var rr = cards[rq].querySelectorAll('input'); rr[0].value = qs.get('a'); rr[1].value = qs.get('b');
+      if (rr[0].value && rr[1].value && rr[0].value <= rr[1].value) lock(rq); else { rr[0].value = rr[1].value = ''; }
+    }
     if (qs.get('p') && assessorQ >= 0) { cards[assessorQ].querySelector('input').value = qs.get('p'); lock(assessorQ); }
-    if (qs.get('d') && dq >= 0) { cards[dq].querySelector('input').value = qs.get('d'); lock(dq); }
+    if (qs.get('d') && dq >= 0) { var di = cards[dq].querySelector('input'); di.value = qs.get('d'); if (di.value) lock(dq); }
   }
   applyJobs();
 
@@ -316,18 +324,22 @@ var DEMO = true;
     row('工期區間', rg);
     var pIn = document.createElement('input'); pIn.type = 'text'; pIn.value = mine.name || '';
     row('評估人員（你的名字）', pIn);
+    var dIn = document.createElement('input'); dIn.type = 'date';
+    var d0 = new Date(), z0 = function (n) { return ('0' + n).slice(-2); };
+    dIn.value = d0.getFullYear() + '-' + z0(d0.getMonth() + 1) + '-' + z0(d0.getDate());
+    row('評估日期', dIn);
     var gm = el('div', 'msg'); gm.hidden = true; sa.appendChild(gm);
     var gen = el('button', 'send', '產生連結'); gen.type = 'button'; sa.appendChild(gen);
     var out = el('div'); out.hidden = true; sa.appendChild(out);
     gen.onclick = function () {
       var name = sIn.value.trim();
-      if (!name || !ga.value || !gb.value || !pIn.value.trim()) { gm.textContent = '工地、工期、評估人員都要填'; gm.hidden = false; return; }
+      if (!name || !ga.value || !gb.value || !pIn.value.trim() || !dIn.value) { gm.textContent = '工地、工期、評估人員、評估日期都要填'; gm.hidden = false; return; }
+      if (gb.value < ga.value) { gm.textContent = '結束日不能早於開始日'; gm.hidden = false; return; }
       gm.hidden = true; save(STAFF, { name: pIn.value.trim() });
-      var d0 = new Date(), z0 = function (n) { return ('0' + n).slice(-2); };
       var u = new URLSearchParams();
       if (pickedStore) u.set('s', pickedStore[0]); else u.set('n', name);
       u.set('a', ga.value); u.set('b', gb.value); u.set('p', pIn.value.trim());
-      u.set('d', d0.getFullYear() + '-' + z0(d0.getMonth() + 1) + '-' + z0(d0.getDate()));
+      u.set('d', dIn.value);
       var link = location.origin + location.pathname + '?' + u.toString();
       var msg = '【工地事前風險評估暨危害告知】' + (pickedStore ? pickedStore[1] + '門市' : name) + '，請施工前填寫並簽名：\n' + link;
       out.innerHTML = ''; out.hidden = false;
@@ -358,16 +370,17 @@ var DEMO = true;
   var pad = document.getElementById('pad'), hint = document.getElementById('hint'), sigCard = document.getElementById('sigCard');
   var sigMsg = document.getElementById('sigMsg');
   signer.addEventListener('input', function () { signer.nextElementSibling.hidden = true; if (dirty) sigCard.classList.remove('bad'); keep(); });
-  var ctx = pad.getContext('2d'), drawing = false, dirty = false, last = null;
+  var ctx = pad.getContext('2d'), drawing = false, dirty = false, last = null, cssW = 1, cssH = 1;
   function resize() {
     // 依實際顯示大小×螢幕倍率設畫布，線才不會糊；重設會清空，所以只在還沒簽時調整
     if (dirty) return;
     var r = pad.getBoundingClientRect(), k = window.devicePixelRatio || 1;
-    pad.width = Math.round(r.width * k); pad.height = Math.round(r.height * k);
+    pad.width = Math.round(r.width * k); pad.height = Math.round(r.height * k); cssW = r.width; cssH = r.height;
     ctx.setTransform(k, 0, 0, k, 0, 0);
     ctx.lineWidth = 2.6; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#111'; ctx.fillStyle = '#111';
   }
-  function pos(e) { var r = pad.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
+  // 簽到一半轉手機，畫布不重設（會清掉簽名），座標換算回原尺寸
+  function pos(e) { var r = pad.getBoundingClientRect(); return { x: (e.clientX - r.left) * cssW / r.width, y: (e.clientY - r.top) * cssH / r.height }; }
   pad.addEventListener('pointerdown', function (e) {
     e.preventDefault(); pad.setPointerCapture(e.pointerId);
     drawing = true; last = pos(e);
@@ -407,7 +420,7 @@ var DEMO = true;
     sigCard.classList.toggle('bad', noName || !dirty);
     signer.nextElementSibling.hidden = !noName; sigMsg.hidden = dirty;
     missing += (noName ? 1 : 0) + (dirty ? 0 : 1);
-    first = document.querySelector('#formArea .bad');
+    first = [].filter.call(document.querySelectorAll('#formArea .bad'), function (c) { return !c.hidden; })[0] || null;
     if (first) {
       err.textContent = '還有 ' + missing + ' 題沒填（紅框處）';
       first.scrollIntoView({ behavior: 'smooth', block: 'center' }); return;
