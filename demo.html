@@ -395,7 +395,7 @@ var DEMO = true;
     var fi = qi(function (q) { return q.title.indexOf('消防法令') === 0; });
     if (fi > 0) (function () {
       var c = cards[fi], m = c.querySelector('.msg'), ins = c.querySelectorAll('.opt input'); c.classList.add('plain');
-      setTitle(c, '消防（兩題）', FORM.questions[fi].title);
+      setTitle(c, '消防', FORM.questions[fi].title);
       if (FORM.questions[fi - 1].type === 'note') cards[fi - 1].hidden = true;
       var A = ynRow(c, m, 'fireA', '這家店超過 150 坪嗎？', '一般門市都沒有；不確定就問工程專員', sync);
       var B = ynRow(c, m, 'fireB', '這次施工會動到灑水頭、偵煙器、消防管線嗎？', '', sync);
@@ -405,6 +405,12 @@ var DEMO = true;
         var a = A.val(), b = B.val(), done = a && b;
         ins[0].checked = !!done && a === 'y'; ins[1].checked = !!done && b === 'y'; ins[2].checked = !!done && a !== 'y' && b !== 'y';
         warn.hidden = !(a === 'y' && b === 'y');
+      }
+      var f = new URLSearchParams(location.search).get('f') || '';
+      if (/^[yn][yn]$/.test(f)) {   // 專員發單時已答
+        [A, B].forEach(function (w, k) { w.querySelector('input').value = f[k]; w.hidden = true; });
+        c.querySelector('.qt').appendChild(el('span', 'tag', '專員已填')); c.classList.add('locked');
+        c.insertBefore(el('div', 'licl', '這家店' + (f[0] === 'y' ? '超過' : '沒有超過') + ' 150 坪；這次施工' + (f[1] === 'y' ? '會' : '不會') + '動到灑水頭、偵煙器、消防管線。'), warn);
       }
       sync();
     })();
@@ -496,6 +502,15 @@ var DEMO = true;
     var d0 = new Date(), z0 = function (n) { return ('0' + n).slice(-2); };
     dIn.value = d0.getFullYear() + '-' + z0(d0.getMonth() + 1) + '-' + z0(d0.getDate());
     row('評估日期', dIn);
+    var fireSel = [];
+    if (DEMO) [['這家店超過 150 坪嗎？', '一般門市都沒有'], ['這次施工會動到灑水頭、偵煙器、消防管線嗎？', '']].forEach(function (t, k) {
+      var w = el('div', 'yn'); w.appendChild(el('div', 'ynq', t[0])); if (t[1]) w.appendChild(el('div', 'tip', t[1]));
+      var bs = el('div', 'ynb'), y = el('button', null, '是'), n = el('button', 'on', '不是'); y.type = n.type = 'button';
+      fireSel[k] = 'n';
+      y.onclick = function () { fireSel[k] = 'y'; y.classList.add('on'); n.classList.remove('on'); };
+      n.onclick = function () { fireSel[k] = 'n'; n.classList.add('on'); y.classList.remove('on'); };
+      bs.appendChild(y); bs.appendChild(n); w.appendChild(bs); sa.appendChild(w);
+    });
     var gm = el('div', 'msg'); gm.hidden = true; sa.appendChild(gm);
     var gen = el('button', 'send', '產生 QR code'); gen.type = 'button'; sa.appendChild(gen);
     var out = el('div'); out.hidden = true; sa.appendChild(out);
@@ -508,6 +523,7 @@ var DEMO = true;
       if (pickedStore) u.set('s', pickedStore[0]); else u.set('n', name);
       u.set('a', ga.value); u.set('b', gb.value); u.set('p', pIn.value.trim());
       u.set('d', dIn.value);
+      if (fireSel.length) u.set('f', fireSel.join(''));
       var link = location.origin + location.pathname + '?' + u.toString();
       var msg = '【工地事前風險評估暨危害告知】' + (pickedStore ? pickedStore[1] + '門市' : name) + '，請施工前填寫並簽名：\n' + link;
       out.innerHTML = ''; out.hidden = false;
