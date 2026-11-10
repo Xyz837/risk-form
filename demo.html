@@ -83,6 +83,19 @@
   .rule.fold .opt, .rule.fold .qd, .rule.fold .okbtn, .rule.fold .skipbtn, .rule.fold .rno { display:none; }
   .rule.fold .qt { font-size:17px; font-weight:600; margin-bottom:4px; color:var(--sub); }
   .rule.fold .okline { display:flex; }
+  .yn { margin:14px 0 4px; }
+  .ynq { font-size:20px; font-weight:600; margin-bottom:6px; }
+  .ynb { display:flex; gap:12px; }
+  .ynb button { flex:1; background:#fff; border:2px solid var(--line); font-size:21px; padding:14px; color:var(--ink); }
+  .ynb button.on { border-color:var(--green); background:#e8f3ee; font-weight:700; }
+  .plain .opt { display:none; }
+  .osub { color:var(--sub); font-size:14px; margin:-6px 0 10px; }
+  .rule.fold .osub { display:none; }
+  .warnbox { background:#fdecea; color:var(--red); font-weight:700; border-radius:6px; padding:12px; margin-top:12px; }
+  .licbox { margin-top:14px; border-top:1px dashed var(--line); padding-top:10px; }
+  .licl { display:flex; gap:12px; padding:8px 0; }
+  .licl b { flex:none; color:var(--green); min-width:1.4em; }
+  .okmsg { color:var(--green); font-weight:700; margin-top:12px; }
   .pbar { position:sticky; top:0; z-index:5; background:var(--green); color:#fff; border-radius:0 0 8px 8px; padding:8px 14px; margin:-12px 0 12px; font-size:17px; font-weight:700; }
 </style>
 </head>
@@ -331,7 +344,9 @@ var DEMO = true;
     var pb = document.getElementById('pbar'); pb.hidden = !vis.length || !jobsPicked().length;
     pb.textContent = done === vis.length ? '注意事項 ' + vis.length + ' 張都看完了，請往下簽名' : '注意事項 已看 ' + done + '／' + vis.length + ' 張';
     if (document.getElementById('stmt').textContent) updStmt();
+    if (licSync) licSync();
   }
+  var licSync = null;
   if (CARD) {
     FORM.questions.forEach(function (q, i) {
       if (q.type !== 'check' || /^(合格人員證照|消防法令)/.test(q.title)) return;
@@ -354,6 +369,79 @@ var DEMO = true;
       c.addEventListener('click', function () { if (c.classList.contains('fold')) paint(i, false); });
       paint(i, true);
     });
+    // 白話標題（原本的分類名稱縮成小字放下面；條文本身不動）
+    var PLAIN = { 6: '進工地的基本規定', 8: '用 A 字梯（合梯）的時候', 9: '用靠梯、拉梯的時候', 10: '用有輪子的施工架的時候', 11: '搭施工架、鷹架的時候',
+      12: '用高空工作車的時候', 13: '站在 2 公尺以上高處的時候', 14: '旁邊有開口、邊緣會掉下去的地方', 15: '上屋頂的時候', 16: '用吊車吊東西的時候',
+      17: '動火的時候（噴燈、燒焊）', 18: '用高壓鋼瓶的時候（乙炔、氧氣、瓦斯…）', 19: '接冷氣銅管的時候', 20: '碰電的時候（接線、換插座、開關箱）', 21: '工地臨時用電',
+      22: '用電焊機的時候', 23: '切割的時候（砂輪機、圓盤鋸、木工鋸台）', 24: '用釘槍的時候', 25: '用油漆、溶劑的時候', 26: '接瓦斯管的時候',
+      27: '材料怎麼放', 28: '工地環境', 29: '大熱天在戶外做的時候', 30: '拆除的時候' };
+    function setTitle(c, main, sub) {
+      var qt = c.querySelector('.qt'); qt.firstChild.nodeValue = main;
+      qt.parentNode.insertBefore(el('div', 'osub', sub), qt.nextSibling);
+    }
+    Object.keys(PLAIN).forEach(function (k) { if (FORM.questions[k] && FORM.questions[k].type === 'check') setTitle(cards[k], PLAIN[k], FORM.questions[k].title); });
+    // 是／不是 題：選擇記在藏起來的欄位，草稿一起存
+    function ynRow(c, before, name, text, hint, onpick) {
+      var w = el('div', 'yn'); w.appendChild(el('div', 'ynq', text)); if (hint) w.appendChild(el('div', 'tip', hint));
+      var hid = document.createElement('input'); hid.type = 'hidden'; hid.name = name; hid.value = draft.vals[name] || ''; w.appendChild(hid);
+      var bs = el('div', 'ynb'), y = el('button', null, '是'), n = el('button', null, '不是'); y.type = n.type = 'button';
+      bs.appendChild(y); bs.appendChild(n); w.appendChild(bs); c.insertBefore(w, before);
+      function show() { y.classList.toggle('on', hid.value === 'y'); n.classList.toggle('on', hid.value === 'n'); }
+      function pick(v) { hid.value = v; show(); onpick(); mark(c, false); keep(); }
+      y.onclick = function () { pick('y'); }; n.onclick = function () { pick('n'); };
+      show(); w.val = function () { return hid.value; }; return w;
+    }
+    // 消防法令：兩個白話是非題，換算回原本的勾選
+    var fi = qi(function (q) { return q.title.indexOf('消防法令') === 0; });
+    if (fi > 0) (function () {
+      var c = cards[fi], m = c.querySelector('.msg'), ins = c.querySelectorAll('.opt input'); c.classList.add('plain');
+      setTitle(c, '消防（兩題）', FORM.questions[fi].title);
+      if (FORM.questions[fi - 1].type === 'note') cards[fi - 1].hidden = true;
+      var A = ynRow(c, m, 'fireA', '這家店超過 150 坪嗎？', '一般門市都沒有；不確定就問工程專員', sync);
+      var B = ynRow(c, m, 'fireB', '這次施工會動到灑水頭、偵煙器、消防管線嗎？', '', sync);
+      var warn = el('div', 'warnbox', FORM.questions[fi - 1].title.replace(/^如同時符合下列二項[，,]\s*則/, '兩題都答「是」：')); c.insertBefore(warn, m);
+      m.textContent = '兩題都要回答';
+      function sync() {
+        var a = A.val(), b = B.val(), done = a && b;
+        ins[0].checked = !!done && a === 'y'; ins[1].checked = !!done && b === 'y'; ins[2].checked = !!done && a !== 'y' && b !== 'y';
+        warn.hidden = !(a === 'y' && b === 'y');
+      }
+      sync();
+    })();
+    // 合格人員證照：跟著前面選的工作帶出要哪些證照，不讓廠商自己從十幾種裡找（對照為試作，待勞安核）
+    var li = qi(function (q) { return q.title.indexOf('合格人員證照') === 0; });
+    if (li > 0) (function () {
+      var LIC = [['吊車', '吊掛：操作手、吊掛手證照，車輛檢查合格證'], ['噴燈', '用乙炔：乙炔熔接裝置作業人員證照'], ['上屋頂', '上屋頂：要有屋頂作業主管'],
+                 ['高空工作車', '高空工作車：操作人員證照'], ['施工架', '施工架：施工架組配作業主管、強度計算書及施工圖說']];
+      var c = cards[li], m = c.querySelector('.msg'), ins = c.querySelectorAll('.opt input'); c.classList.add('plain');
+      setTitle(c, '證照', FORM.questions[li].title);
+      var A = ynRow(c, m, 'licA', '你是裝潢或統包廠商嗎？', '', function () { licSync(); });
+      var B = ynRow(c, m, 'licB', '這次會開堆高機，或做開挖、模板、擋土支撐嗎？', '一般門市施工不會', function () { licSync(); });
+      var lb = el('div', 'licbox'); c.insertBefore(lb, m);
+      var ok = document.createElement('input'); ok.type = 'hidden'; ok.name = 'licOK'; ok.value = draft.vals.licOK || ''; c.appendChild(ok);
+      licSync = function () {
+        var on = jobsPicked(), items = [], a = A.val(), b = B.val(), done = a && b;
+        if (a === 'y') items.push('裝潢、統包：要有合格現場負責人（丙種安全衛生業務主管）');
+        var nj = 0; LIC.forEach(function (x) { if (on.some(function (n) { return n.indexOf(x[0]) >= 0; })) { items.push(x[1]); nj++; } });
+        if (b === 'y') items.push('堆高機操作人員、露天開挖作業主管、模板支撐作業主管、擋土支撐作業主管（含強度計算書及施工圖說）');
+        var sig = items.join('|'), conf = !!sig && ok.value === sig;
+        lb.innerHTML = ''; lb.hidden = !items.length && !done;
+        if (items.length) {
+          lb.appendChild(el('div', 'ynq', '這次要有的證照（按時回訓）'));
+          items.forEach(function (t, k) { var r = el('div', 'licl'); r.appendChild(el('b', null, (k + 1) + '.')); r.appendChild(el('span', null, t)); lb.appendChild(r); });
+          if (done) {
+            var bt = el('button', 'send okbtn', conf ? '✔ 證照都有，會帶著' : '證照都有，會帶著'); bt.type = 'button';
+            bt.onclick = function () { ok.value = sig; licSync(); mark(c, false); keep(); };
+            lb.appendChild(bt);
+          }
+        } else if (done) lb.appendChild(el('div', 'okmsg', '✔ 這次的工作不需要特別證照'));
+        ins[0].checked = !!done && conf && a === 'y';
+        ins[1].checked = !!done && conf && (nj > 0 || b === 'y');
+        ins[2].checked = !!done && !items.length;
+        m.textContent = done ? '請確認證照後按「證照都有，會帶著」' : '兩題都要回答';
+      };
+      licSync();
+    })();
   }
 
   // ---- 專員預填連結：?s=店號(&n=新店店名)&a=開工&b=完工&p=評估人員&d=評估日期 → 這幾題帶好並鎖住
