@@ -62,6 +62,10 @@
   .locked input { background:#f4f4f4; color:#333; -webkit-text-fill-color:#333; opacity:1; }
   .staff .link { word-break:break-all; background:#f4f4f4; border-radius:6px; padding:10px; margin:12px 0; font-size:15px; }
   .staff .send { margin-top:14px; }
+  .staff .qr { margin-top:18px; padding:14px; border:1px solid #ddd; border-radius:8px; text-align:center; background:#fff; }
+  .staff .qr img { width:100%; max-width:300px; height:auto; image-rendering:pixelated; }
+  .staff .qrt { font-size:19px; font-weight:bold; margin-bottom:8px; }
+  .staff .qrs { font-size:15px; margin-top:6px; }
   .line { background:#06c755; }
 </style>
 </head>
@@ -306,6 +310,7 @@ var DEMO = true;
 
   // ---- 專員發單頁：?staff=1
   if (qs.get('staff')) {
+    if (!/script\.google/.test(location.host)) { var qj = document.createElement('script'); qj.src = 'qr.js'; document.head.appendChild(qj); }
     document.getElementById('formArea').hidden = true;
     var sa = document.getElementById('staffArea'), mine = load(STAFF) || {}, pickedStore = null;
     sa.hidden = false;
@@ -352,6 +357,19 @@ var DEMO = true;
       var ln = el('button', 'send line', '用 LINE 傳給廠商'); ln.type = 'button';
       ln.onclick = function () { location.href = 'https://line.me/R/share?text=' + encodeURIComponent(msg); };
       out.appendChild(cp); out.appendChild(ln);
+      // QR code：廠商在旁邊時直接掃；長按可存圖（qr.js 沒載到就不顯示，不影響連結）
+      if (window.qrcode) try {
+        var q = window.qrcode(0, 'M'); q.addData(link); q.make();
+        var n = q.getModuleCount(), sc = 8, pad = 4 * sc, cv = document.createElement('canvas');
+        cv.width = cv.height = n * sc + pad * 2;
+        var cx = cv.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, cv.width, cv.height); cx.fillStyle = '#000';
+        for (var r = 0; r < n; r++) for (var c = 0; c < n; c++) if (q.isDark(r, c)) cx.fillRect(pad + c * sc, pad + r * sc, sc, sc);
+        var qb = el('div', 'qr'); qb.appendChild(el('div', 'qrt', '廠商在旁邊？請他掃這個'));
+        var im = document.createElement('img'); im.src = cv.toDataURL('image/png'); im.alt = '這家店專用連結的 QR code'; qb.appendChild(im);
+        qb.appendChild(el('div', 'qrs', (pickedStore ? pickedStore[1] + '門市' : name) + '｜' + ga.value + ' ~ ' + gb.value));
+        qb.appendChild(el('div', 'qrs', '長按圖片可儲存'));
+        out.appendChild(qb);
+      } catch (e) {}
       var tr = el('button', 'again', '我先看看廠商會看到什麼'); tr.type = 'button'; tr.onclick = function () { window.open(link, '_blank'); };
       out.appendChild(tr);
     };
