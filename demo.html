@@ -67,6 +67,23 @@
   .staff .qrt { font-size:19px; font-weight:bold; margin-bottom:8px; }
   .staff .qrs { font-size:15px; margin-top:6px; }
   .line { background:#06c755; }
+  /* 卡片模式（試玩）：條文改成大字條列，一張按一顆 */
+  .rule .opt { pointer-events:none; cursor:default; padding:8px 0; }
+  .rule .opt input, .rule .opt.none { display:none; }
+  .rule .opt .num { flex:none; min-width:1.4em; font-weight:700; color:var(--green); }
+  .rule .opt.key { color:var(--red); font-weight:700; }
+  .rule .opt.key .num { color:var(--red); }
+  .rule .rno { display:inline-block; background:#e8f3ee; color:var(--green); font-size:15px; font-weight:700; border-radius:4px; padding:1px 10px; margin-bottom:8px; }
+  .rule .okbtn { margin-top:14px; }
+  .rule .skipbtn { width:100%; background:#eee; color:#333; margin-top:10px; }
+  .rule .okline { display:none; align-items:center; justify-content:space-between; gap:10px; font-weight:700; color:var(--green); }
+  .rule .okline small { font-weight:400; color:var(--sub); font-size:15px; flex:none; }
+  .rule.skipd .okline { color:var(--sub); }
+  .rule.fold { cursor:pointer; padding-top:14px; padding-bottom:12px; background:#f6faf8; }
+  .rule.fold .opt, .rule.fold .qd, .rule.fold .okbtn, .rule.fold .skipbtn, .rule.fold .rno { display:none; }
+  .rule.fold .qt { font-size:17px; font-weight:600; margin-bottom:4px; color:var(--sub); }
+  .rule.fold .okline { display:flex; }
+  .pbar { position:sticky; top:0; z-index:5; background:var(--green); color:#fff; border-radius:0 0 8px 8px; padding:8px 14px; margin:-12px 0 12px; font-size:17px; font-weight:700; }
 </style>
 </head>
 <body>
@@ -79,6 +96,7 @@
       <p id="fdesc"></p>
       <div class="req-note">* 表示必填問題</div>
     </div>
+    <div class="pbar" id="pbar" hidden></div>
     <div id="qs"></div>
     <div class="card q" id="sigCard">
       <div class="qt">簽名人姓名<span class="star">*</span></div>
@@ -241,6 +259,7 @@ var DEMO = true;
     });
     [].forEach.call(document.querySelectorAll('input[name=jobs]'), function (x) { x.parentNode.classList.toggle('on', x.checked); });
     if (jobCard && on.length) mark(jobCard, false);
+    if (CARD) prog();
   }
   function answer(i) {
     var q = FORM.questions[i], c = cards[i];
@@ -280,6 +299,62 @@ var DEMO = true;
     if (companyQ >= 0) { var cp = cards[companyQ].querySelector('input'); if (!cp.value && me.company) cp.value = me.company; }
     signer.value = draft.signer || me.signer || '';
   })();
+
+  // ---- 卡片模式（目前只開在試玩頁）：條文型的組改成「看完按一顆」。勾選框還在（藏起來），所以送出內容、必填檢查、草稿都跟原本一樣
+  var CARD = DEMO, ruleIdx = [];
+  var KEYS = { 6: [0], 8: [4], 9: [3], 13: [0], 17: [0], 20: [0], 21: [7] };   // 紅字重點（示意，待依勞安罰款統計挑）
+  function ruleState(i) {
+    var q = FORM.questions[i], on = answerRaw(i);
+    if (q.none && on.indexOf(q.none) >= 0) return 'skip';
+    return q.options.every(function (o) { return o === q.none || on.indexOf(o) >= 0; }) ? 'ok' : '';
+  }
+  function answerRaw(i) { return [].slice.call(cards[i].querySelectorAll('input:checked')).map(function (x) { return x.value; }); }
+  function paint(i, fold) {
+    var c = cards[i], st = ruleState(i);
+    c.classList.toggle('fold', !!st && fold); c.classList.toggle('skipd', st === 'skip');
+    c.querySelector('.okline span').textContent = st === 'skip' ? '－ 本次沒有這項作業' : '✔ 看完了，會照做';
+    c.querySelector('.okbtn').textContent = st === 'ok' ? '✔ 已確認（點一下收起來）' : '看完了，會照做';
+  }
+  function setRule(i, st) {
+    var q = FORM.questions[i];
+    [].forEach.call(cards[i].querySelectorAll('input'), function (x) { x.checked = st === 'skip' ? x.value === q.none : x.value !== q.none; });
+    mark(cards[i], false); keep(); paint(i, true); prog();
+    var vis = ruleIdx.filter(function (k) { return !cards[k].hidden; });
+    var nx = vis.filter(function (k) { return k > i && !ruleState(k); })[0];
+    if (nx == null) nx = vis.filter(function (k) { return !ruleState(k); })[0];
+    var to = nx != null ? cards[nx] : cards[i].nextElementSibling;
+    if (to) setTimeout(function () { window.scrollTo({ top: to.getBoundingClientRect().top + window.pageYOffset - 56, behavior: 'smooth' }); }, 60);
+  }
+  function prog() {
+    var vis = ruleIdx.filter(function (k) { return !cards[k].hidden; }), done = 0;
+    vis.forEach(function (k, n) { cards[k].querySelector('.rno').textContent = '注意事項 ' + (n + 1) + '／' + vis.length; if (ruleState(k)) done++; });
+    var pb = document.getElementById('pbar'); pb.hidden = !vis.length || !jobsPicked().length;
+    pb.textContent = done === vis.length ? '注意事項 ' + vis.length + ' 張都看完了，請往下簽名' : '注意事項 已看 ' + done + '／' + vis.length + ' 張';
+    if (document.getElementById('stmt').textContent) updStmt();
+  }
+  if (CARD) {
+    FORM.questions.forEach(function (q, i) {
+      if (q.type !== 'check' || /^(合格人員證照|消防法令)/.test(q.title)) return;
+      ruleIdx.push(i);
+      var c = cards[i], n = 0; c.classList.add('rule');
+      c.insertBefore(el('div', 'rno'), c.firstChild);
+      [].forEach.call(c.querySelectorAll('.opt'), function (lb, k) {
+        if (q.options[k] === q.none) return;
+        lb.insertBefore(el('span', 'num', (++n) + '.'), lb.firstChild);
+        if ((KEYS[i] || []).indexOf(k) >= 0) lb.classList.add('key');
+      });
+      var m = c.querySelector('.msg'); m.textContent = '請看完後按「看完了，會照做」';
+      var ok = el('button', 'send okbtn', ''); ok.type = 'button'; c.insertBefore(ok, m);
+      ok.onclick = function (e) { e.stopPropagation(); if (ruleState(i) === 'ok') paint(i, true); else setRule(i, 'ok'); };
+      if (q.none && !jobOf[q.title]) {   // 每次都出現的組才給「沒有這項」；選了工作才出現的組，一定有這項
+        var sk = el('button', 'skipbtn', '本次沒有這項作業'); sk.type = 'button'; c.insertBefore(sk, m);
+        sk.onclick = function (e) { e.stopPropagation(); setRule(i, 'skip'); };
+      }
+      var ol = el('div', 'okline'); ol.appendChild(el('span')); ol.appendChild(el('small', null, '點一下重看')); c.insertBefore(ol, m);
+      c.addEventListener('click', function () { if (c.classList.contains('fold')) paint(i, false); });
+      paint(i, true);
+    });
+  }
 
   // ---- 專員預填連結：?s=店號(&n=新店店名)&a=開工&b=完工&p=評估人員&d=評估日期 → 這幾題帶好並鎖住
   var qs = new URLSearchParams(location.search), prefill = null;
@@ -374,7 +449,8 @@ var DEMO = true;
   var stmt = document.getElementById('stmt');
   function updStmt() {
     var n = assessorQ >= 0 ? cards[assessorQ].querySelector('input').value.trim() : '';
-    stmt.textContent = '本人已由統一超商評估人員 ' + (n || '○○○') + ' 告知上述危害因素及應採取之措施。';
+    stmt.textContent = '本人已由統一超商評估人員 ' + (n || '○○○') + ' 告知上述危害因素及應採取之措施。'
+      + (CARD ? '以上 ' + ruleIdx.filter(function (k) { return !cards[k].hidden; }).length + ' 張注意事項我都看過，並會照做。' : '');
   }
   if (assessorQ >= 0) cards[assessorQ].querySelector('input').addEventListener('input', updStmt);
   updStmt();
