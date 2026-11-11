@@ -96,6 +96,14 @@
   .licl { display:flex; gap:12px; padding:8px 0; }
   .licl b { flex:none; color:var(--green); min-width:1.4em; }
   .okmsg { color:var(--green); font-weight:700; margin-top:12px; }
+  /* 閱讀模式（試玩）：條文一路往下看，最後一個「我已閱讀」 */
+  .readmode .okbtn, .readmode .skipbtn, .readmode .okline { display:none !important; }
+  .chips button.chip { background:#fff; font-size:19px; color:var(--ink); padding:11px 18px; }
+  .chips button.chip.on { background:#e8f3ee; }
+  .readcard { border:2px solid var(--green); background:#f6faf8; }
+  .readcard label { display:flex; gap:14px; align-items:flex-start; font-size:21px; font-weight:700; cursor:pointer; }
+  .readcard input { width:34px; height:34px; flex:none; margin:0; accent-color:var(--green); }
+  .morehint { text-align:center; color:var(--green); font-weight:700; padding:6px 0 14px; }
   .pbar { position:sticky; top:0; z-index:5; background:var(--green); color:#fff; border-radius:0 0 8px 8px; padding:8px 14px; margin:-12px 0 12px; font-size:17px; font-weight:700; }
 </style>
 </head>
@@ -314,7 +322,7 @@ var DEMO = true;
   })();
 
   // ---- 卡片模式（目前只開在試玩頁）：條文型的組改成「看完按一顆」。勾選框還在（藏起來），所以送出內容、必填檢查、草稿都跟原本一樣
-  var CARD = DEMO, ruleIdx = [];
+  var CARD = DEMO, READ = CARD, ruleIdx = [], readCard = null, readBox = null, readSeen = false;
   var KEYS = { 6: [0], 8: [4], 9: [3], 13: [0], 17: [0], 20: [0], 21: [7] };   // 紅字重點（示意，待依勞安罰款統計挑）
   function ruleState(i) {
     var q = FORM.questions[i], on = answerRaw(i);
@@ -324,7 +332,7 @@ var DEMO = true;
   function answerRaw(i) { return [].slice.call(cards[i].querySelectorAll('input:checked')).map(function (x) { return x.value; }); }
   function paint(i, fold) {
     var c = cards[i], st = ruleState(i);
-    c.classList.toggle('fold', !!st && fold); c.classList.toggle('skipd', st === 'skip');
+    c.classList.toggle('fold', !!st && fold && !READ); c.classList.toggle('skipd', st === 'skip');
     c.querySelector('.okline span').textContent = st === 'skip' ? '－ 本次沒有這項作業' : '✔ 看完了，會照做';
     c.querySelector('.okbtn').textContent = st === 'ok' ? '✔ 已確認（點一下收起來）' : '看完了，會照做';
   }
@@ -343,6 +351,14 @@ var DEMO = true;
     vis.forEach(function (k, n) { cards[k].querySelector('.rno').textContent = '注意事項 ' + (n + 1) + '／' + vis.length; if (ruleState(k)) done++; });
     var pb = document.getElementById('pbar'); pb.hidden = !vis.length || !jobsPicked().length;
     pb.textContent = done === vis.length ? '注意事項 ' + vis.length + ' 張都看完了，請往下簽名' : '注意事項 已看 ' + done + '／' + vis.length + ' 張';
+    if (READ && readCard) {
+      var all = vis.length > 0 && done === vis.length;
+      pb.textContent = all ? '注意事項已確認，請往下簽名' : '往下滑，看完 ' + vis.length + ' 張注意事項，最後打勾';
+      readBox.checked = all; if (all) readSeen = true;
+      readCard.querySelector('span').textContent = '我已閱讀以上 ' + vis.length + ' 張注意事項，並會照做';
+      readCard.hidden = !readSeen || !vis.length || !jobsPicked().length;
+      readCard.previousElementSibling.hidden = !readCard.hidden || !vis.length || !jobsPicked().length;
+    }
     if (document.getElementById('stmt').textContent) updStmt();
     if (licSync) licSync();
   }
@@ -369,6 +385,51 @@ var DEMO = true;
       c.addEventListener('click', function () { if (c.classList.contains('fold')) paint(i, false); });
       paint(i, true);
     });
+    if (READ && ruleIdx.length) (function () {
+      box.classList.add('readmode');
+      ruleIdx.forEach(function (i) { cards[i].querySelector('.msg').textContent = ''; });
+      var lastRule = cards[ruleIdx[ruleIdx.length - 1]];
+      var hint = el('div', 'morehint', '↓ 請繼續往下滑，看完才能打勾 ↓');
+      readCard = el('div', 'card q readcard'); readCard.hidden = true;
+      var lb = el('label'); readBox = document.createElement('input'); readBox.type = 'checkbox'; readBox.name = 'readAll';
+      lb.appendChild(readBox); lb.appendChild(el('span', null, '')); readCard.appendChild(lb);
+      var m = el('div', 'msg', '請看完上面的注意事項，再勾「我已閱讀」'); m.hidden = true; readCard.appendChild(m);
+      box.insertBefore(readCard, lastRule.nextSibling); box.insertBefore(hint, readCard);
+      readBox.addEventListener('change', function (e) {
+        e.stopPropagation();
+        ruleIdx.forEach(function (i) {
+          if (cards[i].hidden) return; var q = FORM.questions[i];
+          [].forEach.call(cards[i].querySelectorAll('input'), function (x) { x.checked = readBox.checked && x.value !== q.none; });
+        });
+        mark(readCard, false); keep(); prog();
+      });
+      // 滑到這裡（＝上面都滑過了）才出現打勾
+      if (window.IntersectionObserver) new IntersectionObserver(function (es) {
+        if (es.some(function (x) { return x.isIntersecting; }) && jobsPicked().length) { readSeen = true; prog(); }
+      }, { threshold: 0.6 }).observe(hint); else readSeen = true;
+    })();
+    // 工種：選了就先幫忙勾好常做的工作，不對可以自己改（對照為試作）
+    if (jobCard) (function () {
+      var TRADES = [['水電', ['爬梯子', '水電']], ['冷氣冷凍', ['爬梯子', '冷氣', '噴燈']], ['裝潢木作', ['爬梯子', '切割', '使用釘槍']], ['油漆', ['爬梯子', '油漆']],
+                    ['招牌', ['高空工作車', '水電', '戶外熱天']], ['鐵工電焊', ['電焊', '切割']], ['瓦斯', ['瓦斯管線']], ['拆除清運', ['拆除']], ['其他', []]];
+      var tc = el('div', 'card q'); tc.appendChild(el('div', 'qt', '你是做什麼的？')); tc.appendChild(el('div', 'tip', '選了會先幫你勾好常做的工作'));
+      var ch = el('div', 'chips'), hid = document.createElement('input'); hid.type = 'hidden'; hid.name = 'trade'; hid.value = draft.vals.trade || ''; tc.appendChild(hid);
+      var jt = jobCard.querySelector('.qt'), jtip = jobCard.querySelector('.tip');
+      function show() {
+        [].forEach.call(ch.children, function (b) { b.classList.toggle('on', b.textContent === hid.value); });
+        if (hid.value) { jt.firstChild.nodeValue = '這次會做的工作'; jtip.textContent = hid.value === '其他' ? '請自己點選（可以選好幾個）' : '已經幫你勾好了，不對可以自己改'; }
+      }
+      TRADES.forEach(function (t) {
+        var b = el('button', 'chip', t[0]); b.type = 'button';
+        b.onclick = function () {
+          hid.value = t[0];
+          [].forEach.call(document.getElementsByName('jobs'), function (x) { x.checked = t[1].some(function (k) { return x.value.indexOf(k) === 0 || x.value.indexOf(k) >= 0 && k.length > 2; }); });
+          show(); applyJobs(); mark(jobCard, false); keep();
+        };
+        ch.appendChild(b);
+      });
+      tc.appendChild(ch); box.insertBefore(tc, jobCard); show();
+    })();
     // 白話標題（原本的分類名稱縮成小字放下面；條文本身不動）
     var PLAIN = { 6: '進工地的基本規定', 8: '用 A 字梯（合梯）的時候', 9: '用靠梯、拉梯的時候', 10: '用有輪子的施工架的時候', 11: '搭施工架、鷹架的時候',
       12: '用高空工作車的時候', 13: '站在 2 公尺以上高處的時候', 14: '旁邊有開口、邊緣會掉下去的地方', 15: '上屋頂的時候', 16: '用吊車吊東西的時候',
@@ -601,14 +662,16 @@ var DEMO = true;
   var send = document.getElementById('send'), err = document.getElementById('err');
   send.onclick = function () {
     err.textContent = '';
-    var answers = [], first = null, missing = 0;
+    var answers = [], first = null, missing = 0, readMiss = false;
     if (jobCard) { var nj = !jobsPicked().length; mark(jobCard, nj); if (nj) missing++; }
     FORM.questions.forEach(function (q, i) {
       var v = answer(i); answers.push(v);
       if (q.type === 'note' || jobHidden(i)) return;
       var bad = q.required && (Array.isArray(v) ? v.length === 0 : !v);
+      if (READ && readCard && ruleIdx.indexOf(i) >= 0) { if (bad) readMiss = true; return; }
       mark(cards[i], bad); if (bad) missing++;
     });
+    if (READ && readCard) { if (readMiss) { readSeen = true; prog(); missing++; } mark(readCard, readMiss); }
     var noName = !signer.value.trim();
     sigCard.classList.toggle('bad', noName || !dirty);
     signer.nextElementSibling.hidden = !noName; sigMsg.hidden = dirty;
