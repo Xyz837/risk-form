@@ -329,7 +329,7 @@ var DEMO = true;
                 ['招牌', ['高空工作車', '水電', '戶外熱天']], ['鐵工電焊', ['電焊', '切割']], ['瓦斯', ['瓦斯管線']], ['拆除清運', ['拆除']], ['統包', []], ['其他', []]];
   // 廠商名單：試玩用的假資料。正式名單不能直接寫在公開網頁裡，要另外決定放哪
   var VENDORS = null || [];   // 網頁不帶名單；工種由後端對名單判斷
-  var setTrade = null, tradeHid = null, vendorCheck = null, nameMoved = false;
+  var setTrade = null, tradeHid = null, vendorCheck = null, nameMoved = false, fireSkip = -1;
   var vendorSearch = function (input, list, onPick) {
     input.addEventListener('input', function () {
       var k = input.value.trim(); list.innerHTML = '';
@@ -538,6 +538,8 @@ var DEMO = true;
         [A, B].forEach(function (w, k) { w.querySelector('input').value = f[k]; w.hidden = true; });
         c.querySelector('.qt').appendChild(el('span', 'tag', '專員已填')); c.classList.add('locked');
         c.insertBefore(el('div', 'licl', '這家店' + (f[0] === 'y' ? '超過' : '沒有超過') + ' 150 坪；這次施工' + (f[1] === 'y' ? '會' : '不會') + '動到灑水頭、偵煙器、消防管線。'), warn);
+      } else {   // 沒走專員連結：消防是專員才知道的事，廠商頁不問、不顯示，這題留白記「專員未填」
+        c.hidden = true; fireSkip = fi;
       }
       sync();
     })();
@@ -740,7 +742,7 @@ var DEMO = true;
     if (jobCard) { var nj = !jobsPicked().length; mark(jobCard, nj); if (nj) missing++; }
     FORM.questions.forEach(function (q, i) {
       var v = answer(i); answers.push(v);
-      if (q.type === 'note' || jobHidden(i)) return;
+      if (q.type === 'note' || jobHidden(i) || i === fireSkip) return;
       var bad = q.required && (Array.isArray(v) ? v.length === 0 : !v);
       if (READ && readCard && ruleIdx.indexOf(i) >= 0) { if (bad) readMiss = true; return; }
       mark(cards[i], bad); if (bad) missing++;
