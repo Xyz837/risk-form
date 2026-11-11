@@ -95,6 +95,7 @@
   .licbox { margin-top:14px; border-top:1px dashed var(--line); padding-top:10px; }
   .licl { display:flex; gap:12px; padding:8px 0; }
   .licl b { flex:none; color:var(--green); min-width:1.4em; }
+  .licbtn { margin-top:14px; }
   .okmsg { color:var(--green); font-weight:700; margin-top:12px; }
   /* 閱讀模式（試玩）：條文一路往下看，最後一個「我已閱讀」 */
   .readmode .okbtn, .readmode .skipbtn, .readmode .okline { display:none !important; }
@@ -323,6 +324,25 @@ var DEMO = true;
 
   // ---- 卡片模式（目前只開在試玩頁）：條文型的組改成「看完按一顆」。勾選框還在（藏起來），所以送出內容、必填檢查、草稿都跟原本一樣
   var CARD = DEMO, READ = CARD, ruleIdx = [], readCard = null, readBox = null, readSeen = false;
+  // 工種 → 先幫忙勾好的工作（對照為試作）
+  var TRADES = [['水電', ['爬梯子', '水電']], ['冷氣冷凍', ['爬梯子', '冷氣', '噴燈']], ['裝潢木作', ['爬梯子', '切割', '使用釘槍']], ['油漆', ['爬梯子', '油漆']],
+                ['招牌', ['高空工作車', '水電', '戶外熱天']], ['鐵工電焊', ['電焊', '切割']], ['瓦斯', ['瓦斯管線']], ['拆除清運', ['拆除']], ['統包', []], ['其他', []]];
+  // 廠商名單：試玩用的假資料。正式名單不能直接寫在公開網頁裡，要另外決定放哪
+  var VENDORS = [['範例水電行', '水電'], ['範例冷凍空調', '冷氣冷凍'], ['範例室內裝修', '裝潢木作'], ['範例油漆工程', '油漆'], ['範例廣告招牌', '招牌'],
+                 ['範例鐵工所', '鐵工電焊'], ['範例瓦斯工程', '瓦斯'], ['範例拆除清運', '拆除清運'], ['範例統包工程', '統包']];
+  var setTrade = null, tradeHid = null;
+  var vendorSearch = function (input, list, onPick) {
+    input.addEventListener('input', function () {
+      var k = input.value.trim(); list.innerHTML = '';
+      var hit = k ? VENDORS.filter(function (v) { return v[0].indexOf(k) >= 0; }).slice(0, 8) : [];
+      hit.forEach(function (v) {
+        var bt = el('button', null, v[0]); bt.type = 'button'; bt.appendChild(el('small', null, v[1]));
+        bt.onclick = function () { input.value = v[0]; list.hidden = true; onPick(v); };
+        list.appendChild(bt);
+      });
+      list.hidden = !hit.length;
+    });
+  };
   var KEYS = { 6: [0], 8: [4], 9: [3], 13: [0], 17: [0], 20: [0], 21: [7] };   // 紅字重點（示意，待依勞安罰款統計挑）
   function ruleState(i) {
     var q = FORM.questions[i], on = answerRaw(i);
@@ -358,6 +378,8 @@ var DEMO = true;
       readCard.querySelector('span').textContent = '我已閱讀以上 ' + vis.length + ' 張注意事項，並會照做';
       readCard.hidden = !readSeen || !vis.length || !jobsPicked().length;
       readCard.previousElementSibling.hidden = !readCard.hidden || !vis.length || !jobsPicked().length;
+      var sc = document.getElementById('sigCard'), sb = document.getElementById('send'), sg = document.getElementById('sigGate');
+      if (sg) { var was = sc.hidden; sc.hidden = sb.hidden = !all; sg.hidden = all; if (was && all) setTimeout(function () { window.dispatchEvent(new Event('resize')); }, 0); }
     }
     if (document.getElementById('stmt').textContent) updStmt();
     if (licSync) licSync();
@@ -395,6 +417,8 @@ var DEMO = true;
       lb.appendChild(readBox); lb.appendChild(el('span', null, '')); readCard.appendChild(lb);
       var m = el('div', 'msg', '請看完上面的注意事項，再勾「我已閱讀」'); m.hidden = true; readCard.appendChild(m);
       box.insertBefore(readCard, lastRule.nextSibling); box.insertBefore(hint, readCard);
+      var sg = el('div', 'card morehint', '勾了「我已閱讀」之後，這裡才會出現簽名'); sg.id = 'sigGate';
+      var sc0 = document.getElementById('sigCard'); sc0.parentNode.insertBefore(sg, sc0);
       readBox.addEventListener('change', function (e) {
         e.stopPropagation();
         ruleIdx.forEach(function (i) {
@@ -408,27 +432,39 @@ var DEMO = true;
         if (es.some(function (x) { return x.isIntersecting; }) && jobsPicked().length) { readSeen = true; prog(); }
       }, { threshold: 0.6 }).observe(hint); else readSeen = true;
     })();
-    // 工種：選了就先幫忙勾好常做的工作，不對可以自己改（對照為試作）
+    // 公司＋工種：專員連結有帶就直接用；沒帶就讓廠商從名單選公司（自動判斷工種），找不到再自己選工種
     if (jobCard) (function () {
-      var TRADES = [['水電', ['爬梯子', '水電']], ['冷氣冷凍', ['爬梯子', '冷氣', '噴燈']], ['裝潢木作', ['爬梯子', '切割', '使用釘槍']], ['油漆', ['爬梯子', '油漆']],
-                    ['招牌', ['高空工作車', '水電', '戶外熱天']], ['鐵工電焊', ['電焊', '切割']], ['瓦斯', ['瓦斯管線']], ['拆除清運', ['拆除']], ['其他', []]];
-      var tc = el('div', 'card q'); tc.appendChild(el('div', 'qt', '你是做什麼的？')); tc.appendChild(el('div', 'tip', '選了會先幫你勾好常做的工作'));
+      var up = new URLSearchParams(location.search), pc = up.get('c') || '', pt = up.get('t') || '';
+      var tc = el('div', 'card q'), t1 = el('div', 'qt', '你的公司'); tc.appendChild(t1);
+      var tip = el('div', 'tip', '打公司名稱，從清單點選；找不到就直接在下面選工種'); tc.appendChild(tip);
+      var vin = document.createElement('input'); vin.type = 'text'; vin.name = 'vendorName'; vin.autocomplete = 'off'; vin.value = draft.vals.vendorName || ''; tc.appendChild(vin);
+      var vl = el('div', 'sugg'); vl.hidden = true; tc.appendChild(vl);
+      var tq = el('div', 'qt', '你是做什麼的？'); tq.style.marginTop = '16px'; tc.appendChild(tq);
       var ch = el('div', 'chips'), hid = document.createElement('input'); hid.type = 'hidden'; hid.name = 'trade'; hid.value = draft.vals.trade || ''; tc.appendChild(hid);
+      tradeHid = hid;
       var jt = jobCard.querySelector('.qt'), jtip = jobCard.querySelector('.tip');
       function show() {
         [].forEach.call(ch.children, function (b) { b.classList.toggle('on', b.textContent === hid.value); });
-        if (hid.value) { jt.firstChild.nodeValue = '這次會做的工作'; jtip.textContent = hid.value === '其他' ? '請自己點選（可以選好幾個）' : '已經幫你勾好了，不對可以自己改'; }
+        if (hid.value) { jt.firstChild.nodeValue = '這次會做的工作'; jtip.textContent = /^(其他|統包)$/.test(hid.value) ? '請自己點選（可以選好幾個）' : '已經幫你勾好了，不對可以自己改'; }
       }
-      TRADES.forEach(function (t) {
-        var b = el('button', 'chip', t[0]); b.type = 'button';
-        b.onclick = function () {
-          hid.value = t[0];
-          [].forEach.call(document.getElementsByName('jobs'), function (x) { x.checked = t[1].some(function (k) { return x.value.indexOf(k) === 0 || x.value.indexOf(k) >= 0 && k.length > 2; }); });
-          show(); applyJobs(); mark(jobCard, false); keep();
-        };
-        ch.appendChild(b);
-      });
+      function setCompany(trade, name) {
+        if (companyQ < 0) return; cards[companyQ].querySelector('input').value = trade + '+' + name; mark(cards[companyQ], false);
+      }
+      setTrade = function (name) {
+        var t = TRADES.filter(function (x) { return x[0] === name; })[0]; if (!t) return;
+        hid.value = name;
+        [].forEach.call(document.getElementsByName('jobs'), function (x) { x.checked = t[1].some(function (k) { return x.value.indexOf(k) === 0; }); });
+        show(); applyJobs(); mark(jobCard, false); keep();
+      };
+      TRADES.forEach(function (t) { var b = el('button', 'chip', t[0]); b.type = 'button'; b.onclick = function () { setTrade(t[0]); }; ch.appendChild(b); });
       tc.appendChild(ch); box.insertBefore(tc, jobCard); show();
+      vendorSearch(vin, vl, function (v) { setCompany(v[1], v[0]); setTrade(v[1]); });
+      if (pt && TRADES.some(function (x) { return x[0] === pt; })) {   // 專員發單時已選廠商
+        if (hid.value !== pt) setTrade(pt);
+        [t1, tip, vin, vl, ch].forEach(function (x) { x.hidden = true; });
+        tq.style.marginTop = '0'; tq.firstChild.nodeValue = pc ? pc + '（' + pt + '）' : pt; tq.appendChild(el('span', 'tag', '專員已填')); tc.classList.add('locked');
+        if (pc && companyQ >= 0) { setCompany(pt, pc); lock(companyQ); }
+      }
     })();
     // 白話標題（原本的分類名稱縮成小字放下面；條文本身不動）
     var PLAIN = { 6: '進工地的基本規定', 8: '用 A 字梯（合梯）的時候', 9: '用靠梯、拉梯的時候', 10: '用有輪子的施工架的時候', 11: '搭施工架、鷹架的時候',
@@ -487,7 +523,10 @@ var DEMO = true;
       var lb = el('div', 'licbox'); c.insertBefore(lb, m);
       var ok = document.createElement('input'); ok.type = 'hidden'; ok.name = 'licOK'; ok.value = draft.vals.licOK || ''; c.appendChild(ok);
       licSync = function () {
-        var on = jobsPicked(), items = [], a = A.val(), b = B.val(), done = a && b;
+        var on = jobsPicked(), items = [], a = A.val(), b = B.val();
+        var tv = tradeHid ? tradeHid.value : ''; if (tv && tv !== '其他') a = /裝潢|統包/.test(tv) ? 'y' : 'n';
+        A.hidden = !!(tv && tv !== '其他');
+        var done = a && b;
         if (a === 'y') items.push('裝潢、統包：要有合格現場負責人（丙種安全衛生業務主管）');
         var nj = 0; LIC.forEach(function (x) { if (on.some(function (n) { return n.indexOf(x[0]) >= 0; })) { items.push(x[1]); nj++; } });
         if (b === 'y') items.push('堆高機操作人員、露天開挖作業主管、模板支撐作業主管、擋土支撐作業主管（含強度計算書及施工圖說）');
@@ -497,7 +536,7 @@ var DEMO = true;
           lb.appendChild(el('div', 'ynq', '這次要有的證照（按時回訓）'));
           items.forEach(function (t, k) { var r = el('div', 'licl'); r.appendChild(el('b', null, (k + 1) + '.')); r.appendChild(el('span', null, t)); lb.appendChild(r); });
           if (done) {
-            var bt = el('button', 'send okbtn', conf ? '✔ 證照都有，會帶著' : '證照都有，會帶著'); bt.type = 'button';
+            var bt = el('button', 'send licbtn', conf ? '✔ 證照都有，會帶著' : '證照都有，會帶著'); bt.type = 'button';
             bt.onclick = function () { ok.value = sig; licSync(); mark(c, false); keep(); };
             lb.appendChild(bt);
           }
@@ -505,7 +544,7 @@ var DEMO = true;
         ins[0].checked = !!done && conf && a === 'y';
         ins[1].checked = !!done && conf && (nj > 0 || b === 'y');
         ins[2].checked = !!done && !items.length;
-        m.textContent = done ? '請確認證照後按「證照都有，會帶著」' : '兩題都要回答';
+        m.textContent = done ? '請確認證照後按「證照都有，會帶著」' : '上面的題目要回答';
       };
       licSync();
     })();
@@ -572,6 +611,16 @@ var DEMO = true;
       n.onclick = function () { fireSel[k] = 'n'; n.classList.add('on'); y.classList.remove('on'); };
       bs.appendChild(y); bs.appendChild(n); w.appendChild(bs); sa.appendChild(w);
     });
+    var vIn = null, vTrade = '';
+    if (DEMO) (function () {
+      vIn = document.createElement('input'); vIn.type = 'text'; vIn.autocomplete = 'off';
+      row('廠商', vIn); vIn.parentNode.insertBefore(el('div', 'tip', '打公司名稱，從清單點選（會自動帶工種）；不在名單就打全名，再點下面的工種'), vIn);
+      var vl = el('div', 'sugg'); vl.hidden = true; vIn.parentNode.appendChild(vl);
+      var ch = el('div', 'chips'); ch.style.marginTop = '10px'; vIn.parentNode.appendChild(ch);
+      function pick(t) { vTrade = t; [].forEach.call(ch.children, function (b) { b.classList.toggle('on', b.textContent === t); }); }
+      TRADES.forEach(function (t) { var b = el('button', 'chip', t[0]); b.type = 'button'; b.onclick = function () { pick(t[0]); }; ch.appendChild(b); });
+      vendorSearch(vIn, vl, function (v) { pick(v[1]); });
+    })();
     var gm = el('div', 'msg'); gm.hidden = true; sa.appendChild(gm);
     var gen = el('button', 'send', '產生 QR code'); gen.type = 'button'; sa.appendChild(gen);
     var out = el('div'); out.hidden = true; sa.appendChild(out);
@@ -585,6 +634,7 @@ var DEMO = true;
       u.set('a', ga.value); u.set('b', gb.value); u.set('p', pIn.value.trim());
       u.set('d', dIn.value);
       if (fireSel.length) u.set('f', fireSel.join(''));
+      if (vIn && vTrade) { u.set('t', vTrade); if (vIn.value.trim()) u.set('c', vIn.value.trim()); }
       var link = location.origin + location.pathname + '?' + u.toString();
       var msg = '【工地事前風險評估暨危害告知】' + (pickedStore ? pickedStore[1] + '門市' : name) + '，請施工前填寫並簽名：\n' + link;
       out.innerHTML = ''; out.hidden = false;
