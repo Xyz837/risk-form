@@ -551,6 +551,9 @@ var DEMO = true;
         var on = jobsPicked(), items = [], a = A.val(), b = B.val();
         var tv = tradeHid ? tradeHid.value : ''; if (tv) a = /裝潢|統包/.test(tv) ? 'y' : 'n';   // 名單或名稱判得出來就不問
         A.hidden = !!tv;
+        // 堆高機／開挖／模板／擋土：只有統包、裝潢、拆除，或判斷不出工種時才問；水電、冷氣、招牌這類不問
+        var askB = !tv || /統包|裝潢|拆除|其他/.test(tv); if (!askB) b = 'n';
+        B.hidden = !askB;
         var done = a && b;
         if (a === 'y') items.push('裝潢、統包：要有合格現場負責人（丙種安全衛生業務主管）');
         var nj = 0; LIC.forEach(function (x) { if (on.some(function (n) { return n.indexOf(x[0]) >= 0; })) { items.push(x[1]); nj++; } });
@@ -569,6 +572,8 @@ var DEMO = true;
         ins[0].checked = !!done && conf && a === 'y';
         ins[1].checked = !!done && conf && (nj > 0 || b === 'y');
         ins[2].checked = !!done && !items.length;
+        c.hidden = A.hidden && B.hidden && !items.length;   // 沒有要問的、也沒有要帶的證照，整張不出現（記為本次無此作業）
+        if (c.hidden) mark(c, false);
         m.textContent = done ? '請確認證照後按「證照都有，會帶著」' : '上面的題目要回答';
       };
       licSync();
