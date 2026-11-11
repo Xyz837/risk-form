@@ -328,15 +328,14 @@ var DEMO = true;
   var TRADES = [['水電', ['爬梯子', '水電']], ['冷氣冷凍', ['爬梯子', '冷氣', '噴燈']], ['裝潢木作', ['爬梯子', '切割', '使用釘槍']], ['油漆', ['爬梯子', '油漆']],
                 ['招牌', ['高空工作車', '水電', '戶外熱天']], ['鐵工電焊', ['電焊', '切割']], ['瓦斯', ['瓦斯管線']], ['拆除清運', ['拆除']], ['統包', []], ['其他', []]];
   // 廠商名單：試玩用的假資料。正式名單不能直接寫在公開網頁裡，要另外決定放哪
-  var VENDORS = [['範例水電行', '水電'], ['範例冷凍空調', '冷氣冷凍'], ['範例室內裝修', '裝潢木作'], ['範例油漆工程', '油漆'], ['範例廣告招牌', '招牌'],
-                 ['範例鐵工所', '鐵工電焊'], ['範例瓦斯工程', '瓦斯'], ['範例拆除清運', '拆除清運'], ['範例統包工程', '統包']];
+  var VENDORS = null || [];   // 網頁不帶名單；工種由後端對名單判斷
   var setTrade = null, tradeHid = null, vendorCheck = null;
   var vendorSearch = function (input, list, onPick) {
     input.addEventListener('input', function () {
       var k = input.value.trim(); list.innerHTML = '';
       var hit = k ? VENDORS.filter(function (v) { return v[0].indexOf(k) >= 0; }).slice(0, 8) : [];
       hit.forEach(function (v) {
-        var bt = el('button', null, v[0]); bt.type = 'button'; bt.appendChild(el('small', null, v[1]));
+        var bt = el('button', null, v[0]); bt.type = 'button';
         bt.onclick = function () { input.value = v[0]; list.hidden = true; onPick(v); };
         list.appendChild(bt);
       });
@@ -437,11 +436,12 @@ var DEMO = true;
       var KEY = [['統包', /統包/], ['裝潢木作', /室內裝修|裝潢|裝修|木作|木工/], ['水電', /水電|電機|電氣|機電|電工/], ['冷氣冷凍', /冷凍|空調|冷氣/], ['油漆', /油漆|塗裝/],
                  ['招牌', /招牌|廣告/], ['鐵工電焊', /鐵工|鋼構|電焊|鐵件/], ['瓦斯', /瓦斯|天然氣/], ['拆除清運', /拆除|清運/]];
       function detect(name) {
-        var v = VENDORS.filter(function (x) { return x[0] === name; })[0]; if (v) return v[1];
+        // 名單比對：打的全名裡「包含」名單上的名稱就算（例：範例水電行有限公司 → 範例水電行），取最長的那個
+        var v = VENDORS.filter(function (x) { return x[0].length >= 2 && name.indexOf(x[0]) >= 0; }).sort(function (a, b) { return b[0].length - a[0].length; })[0]; if (v) return v[1];
         var k = KEY.filter(function (x) { return x[1].test(name); })[0]; return k ? k[0] : '';
       }
       var tc = el('div', 'card q'), t1 = el('div', 'qt', '你的公司名稱'); t1.appendChild(el('span', 'star', '*')); tc.appendChild(t1);
-      tc.appendChild(el('div', 'tip', '打幾個字，從清單點選；清單沒有就打全名'));
+      tc.appendChild(el('div', 'tip', '打公司名稱就好，例如：○○水電'));
       var vin = document.createElement('input'); vin.type = 'text'; vin.name = 'vendorName'; vin.autocomplete = 'off';
       vin.value = draft.vals.vendorName || (me.company ? me.company.split('+').pop() : ''); tc.appendChild(vin);
       var vl = el('div', 'sugg'); vl.hidden = true; tc.appendChild(vl);
@@ -453,7 +453,7 @@ var DEMO = true;
       function show() {
         var name = vin.value.trim();
         var has = (TRADES.filter(function (x) { return x[0] === hid.value; })[0] || [0, []])[1].length;
-        note.hidden = !name; note.textContent = hid.value ? '✔ ' + hid.value + '廠商，' + (has ? '下面的工作已經幫你勾好' : '請在下面選這次會做的工作') : '';
+        note.hidden = !name; note.textContent = !hid.value ? '' : hid.value === '其他' ? '✔ 請在下面選這次會做的工作' : '✔ ' + hid.value + '廠商，' + (has ? '下面的工作已經幫你勾好' : '請在下面選這次會做的工作');
         if (name && !hid.value) note.hidden = true;
         jt.firstChild.nodeValue = hid.value ? '這次會做的工作' : '今天要做哪些工作？（可以選好幾個）';
         jtip.textContent = hid.value && has ? '已經幫你勾好了，不對可以自己改' : '選了之後，下面只會出現相關的注意事項';
@@ -467,6 +467,18 @@ var DEMO = true;
       };
       function sync() {
         var name = vin.value.trim(), tr = name ? detect(name) : '';
+        apply(name, tr);
+        // 再問後端名單（名單上的優先於看名稱的字）；問不到就維持上面的判斷
+        if (name.length >= 2 && EXEC_URL && window.fetch) {
+          if (asked[name] != null) { if (asked[name]) apply(name, asked[name]); return; }
+          fetch(EXEC_URL, { method: 'POST', body: JSON.stringify({ action: 'vendor', name: name }), credentials: 'omit', redirect: 'follow', headers: { 'Content-Type': 'text/plain;charset=utf-8' } })
+            .then(function (r) { return r.json(); })
+            .then(function (r) { asked[name] = (r && r.trade) || ''; if (asked[name] && vin.value.trim() === name) apply(name, asked[name]); })
+            .catch(function () {});
+        }
+      }
+      var asked = {};
+      function apply(name, tr) {
         if (tr !== hid.value) setTrade(tr); else show();
         if (companyQ >= 0) cards[companyQ].querySelector('input').value = name ? (tr || '其他') + '+' + name : '';
         if (name) mark(tc, false);
@@ -537,8 +549,8 @@ var DEMO = true;
       var ok = document.createElement('input'); ok.type = 'hidden'; ok.name = 'licOK'; ok.value = draft.vals.licOK || ''; c.appendChild(ok);
       licSync = function () {
         var on = jobsPicked(), items = [], a = A.val(), b = B.val();
-        var tv = tradeHid ? tradeHid.value : ''; if (tv && tv !== '其他') a = /裝潢|統包/.test(tv) ? 'y' : 'n';
-        A.hidden = !!(tv && tv !== '其他');
+        var tv = tradeHid ? tradeHid.value : ''; if (tv) a = /裝潢|統包/.test(tv) ? 'y' : 'n';   // 名單或名稱判得出來就不問
+        A.hidden = !!tv;
         var done = a && b;
         if (a === 'y') items.push('裝潢、統包：要有合格現場負責人（丙種安全衛生業務主管）');
         var nj = 0; LIC.forEach(function (x) { if (on.some(function (n) { return n.indexOf(x[0]) >= 0; })) { items.push(x[1]); nj++; } });
