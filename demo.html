@@ -329,7 +329,7 @@ var DEMO = true;
                 ['招牌', ['高空工作車', '水電', '戶外熱天']], ['鐵工電焊', ['電焊', '切割']], ['瓦斯', ['瓦斯管線']], ['拆除清運', ['拆除']], ['統包', []], ['其他', []]];
   // 廠商名單：試玩用的假資料。正式名單不能直接寫在公開網頁裡，要另外決定放哪
   var VENDORS = null || [];   // 網頁不帶名單；工種由後端對名單判斷
-  var setTrade = null, tradeHid = null, vendorCheck = null;
+  var setTrade = null, tradeHid = null, vendorCheck = null, nameMoved = false;
   var vendorSearch = function (input, list, onPick) {
     input.addEventListener('input', function () {
       var k = input.value.trim(); list.innerHTML = '';
@@ -484,7 +484,12 @@ var DEMO = true;
         if (name) mark(tc, false);
         keep();
       }
-      vendorCheck = function () { mark(tc, !vin.value.trim()); };
+      // 姓名搬到公司名稱下面一起填（基本資料），不跟簽名框擠在一起
+      var sgm = signer.nextElementSibling, sgt = signer.previousElementSibling;
+      var nt = el('div', 'qt', '你的姓名（打字，方便日後辨認）'); nt.appendChild(el('span', 'star', '*')); nt.style.marginTop = '18px';
+      tc.appendChild(nt); tc.appendChild(signer); tc.appendChild(sgm); sgt.hidden = true; sgm.textContent = '請填你的姓名'; nameMoved = true;
+      signer.addEventListener('input', function () { if (vin.value.trim() && signer.value.trim()) tc.classList.remove('bad'); });
+      vendorCheck = function () { var nc = !vin.value.trim(), nn = !signer.value.trim(); mark(tc, nc || nn); vm.hidden = !nc; sgm.hidden = !nn; };
       vendorSearch(vin, vl, function () { sync(); });
       vin.addEventListener('change', sync);
       box.insertBefore(tc, jobCard);
@@ -743,7 +748,7 @@ var DEMO = true;
     if (vendorCheck) vendorCheck();
     if (READ && readCard) { if (readMiss) { readSeen = true; prog(); missing++; } mark(readCard, readMiss); }
     var noName = !signer.value.trim();
-    sigCard.classList.toggle('bad', noName || !dirty);
+    sigCard.classList.toggle('bad', (noName && !nameMoved) || !dirty);
     signer.nextElementSibling.hidden = !noName; sigMsg.hidden = dirty;
     missing += (noName ? 1 : 0) + (dirty ? 0 : 1);
     first = [].filter.call(document.querySelectorAll('#formArea .bad'), function (c) { return !c.hidden; })[0] || null;
